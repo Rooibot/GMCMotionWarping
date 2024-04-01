@@ -11,8 +11,10 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "GMCAnimNotifyState_MotionWarping.h"
+#include "GMCMotionWarpedMovementCmp.h"
 #include "GMCMotionWarpInterface.h"
 #include "GMCOrganicMovementComponent.h"
+#include "GMCRootMotionModifier_SkewWarp.h"
 #include "Net/Core/PushModel/PushModel.h"
 #include "Net/UnrealNetwork.h"
 
@@ -230,12 +232,17 @@ void UMotionWarpingComponent::InitializeComponent()
 
 	CharacterOwner = Cast<APawn>(GetOwner());
 	MotionWarpInterfacePawn = Cast<IGMCMotionWarpInterface>(CharacterOwner.Get());
-	
-	UGMC_OrganicMovementCmp* CharacterMovementComp = MotionWarpInterfacePawn ? MotionWarpInterfacePawn->GetOrganicMovementCmp() : nullptr;
+}
+
+void UMotionWarpingComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	UGMCMotionWarpedMovementCmp* CharacterMovementComp = MotionWarpInterfacePawn ? MotionWarpInterfacePawn->GetOrganicMovementCmp() : nullptr;
 	if (CharacterMovementComp)
 	{
- 		CharacterMovementComp->ProcessRootMotionPreConvertToWorld.BindUObject(this, &UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld);
-	}
+		CharacterMovementComp->ProcessRootMotionPreConvertToWorld.BindUObject(this, &UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld);
+	}	
 }
 
 bool UMotionWarpingComponent::ContainsModifier(const UAnimSequenceBase* Animation, float StartTime, float EndTime) const
@@ -441,6 +448,8 @@ FTransform UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld(const FTr
 	}
 #endif
 
+	MotionWarpInterfacePawn->GetMotionWarpMesh()->GetAnimInstance();
+	
 	// Check for warping windows and update modifier states
 	Update(DeltaSeconds);
 
@@ -449,10 +458,23 @@ FTransform UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld(const FTr
 	// Apply Local Space Modifiers
 	for (URootMotionModifier* Modifier : Modifiers)
 	{
+		FName Name = NAME_None;
+		if (const auto SkewWarp = Cast<URootMotionModifier_SkewWarp>(Modifier))
+		{
+			Name = SkewWarp->WarpTargetName;
+		}
+			
 		if (Modifier->GetState() == ERootMotionModifierState::Active)
 		{
 			FinalRootMotion = Modifier->ProcessRootMotion(FinalRootMotion, DeltaSeconds);
-			// GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, FString::Printf(TEXT("skew warp FinalRootMotionTranslation: %s , rotation: %s"), *FinalRootMotion.GetTranslation().ToString(), *FinalRootMotion.GetRotation().ToString()));
+			UE_LOG(LogTemp, Log, TEXT("[%s] %s: %s - %s %s"), GetOwnerRole() == ROLE_Authority ? TEXT("Authority") : TEXT("Client   "),
+				*Name.ToString(), *UEnum::GetValueAsString(Modifier->GetState()),
+				*FinalRootMotion.GetTranslation().ToCompactString(), *FinalRootMotion.GetRotation().Rotator().ToCompactString())
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[%s] %s: %s"), GetOwnerRole() == ROLE_Authority ? TEXT("Authority") : TEXT("Client   "),
+				*Name.ToString(), *UEnum::GetValueAsString(Modifier->GetState()))
 		}
 	}
 
@@ -462,7 +484,7 @@ FTransform UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld(const FTr
 	{
 		const float DrawDebugDuration = FMotionWarpingCVars::CVarMotionWarpingDrawDebugDuration.GetValueOnGameThread();
 		const float PointSize = 7.f;
-		const FVector ActorFeetLocation = GeneralMovementComponent->GetActorFeetLocation();
+		const FVector ActorFeetLocation = GeneralMovementComponent->GetActorLocation();
 		if (Modifiers.Num() > 0)
 		{
 			if (!OriginalRootMotionAccum.IsSet())
@@ -470,12 +492,18 @@ FTransform UMotionWarpingComponent::ProcessRootMotionPreConvertToWorld(const FTr
 				OriginalRootMotionAccum = ActorFeetLocation;
 				WarpedRootMotionAccum = ActorFeetLocation;
 			}
+
+			FVector OldOriginalRootMotionAccum = OriginalRootMotionAccum.GetValue();
+			FVector OldWarpedRootMotionAccum = WarpedRootMotionAccum.GetValue();
 			
 			OriginalRootMotionAccum = OriginalRootMotionAccum.GetValue() + (MotionWarpInterfacePawn->GetMotionWarpMesh()->ConvertLocalRootMotionToWorld(FTransform(InRootMotion.GetLocation()))).GetLocation();
 			WarpedRootMotionAccum = WarpedRootMotionAccum.GetValue() + (MotionWarpInterfacePawn->GetMotionWarpMesh()->ConvertLocalRootMotionToWorld(FTransform(FinalRootMotion.GetLocation()))).GetLocation();
 
-			DrawDebugPoint(GetWorld(), OriginalRootMotionAccum.GetValue(), PointSize, FColor::Red, false, DrawDebugDuration, 0);
-			DrawDebugPoint(GetWorld(), WarpedRootMotionAccum.GetValue(), PointSize, FColor::Green, false, DrawDebugDuration, 0);
+			// DrawDebugPoint(GetWorld(), OriginalRootMotionAccum.GetValue(), PointSize, FColor::Red, false, DrawDebugDuration, 0);
+			// DrawDebugPoint(GetWorld(), WarpedRootMotionAccum.GetValue(), PointSize, FColor::Green, false, DrawDebugDuration, 0);
+
+			DrawDebugLine(GetWorld(), OldOriginalRootMotionAccum, OriginalRootMotionAccum.GetValue(), FColor::Red, false, DrawDebugDuration, 0, 1.f);
+			DrawDebugLine(GetWorld(), OldWarpedRootMotionAccum, WarpedRootMotionAccum.GetValue(), FColor::Green, false, DrawDebugDuration, 0, 1.f);
 		}
 		else
 		{
@@ -528,6 +556,12 @@ int32 UMotionWarpingComponent::RemoveWarpTarget(FName WarpTargetName)
 	}
 
 	return NumRemoved;
+}
+
+void UMotionWarpingComponent::RemoveAllWarpTargets()
+{
+	WarpTargets.Empty();
+	MARK_PROPERTY_DIRTY_FROM_NAME(UMotionWarpingComponent, WarpTargets, this);
 }
 
 void UMotionWarpingComponent::AddOrUpdateWarpTargetFromTransform(FName WarpTargetName, FTransform TargetTransform)

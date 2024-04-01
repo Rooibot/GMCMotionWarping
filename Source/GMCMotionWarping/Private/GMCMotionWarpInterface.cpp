@@ -23,6 +23,6 @@ FAnimMontageInstance* IGMCMotionWarpInterface::GetRootMotionAnimMontageInstance(
 	return Mesh && Mesh->GetAnimInstance() ? Mesh->GetAnimInstance()->GetRootMotionMontageInstance() : nullptr;
 }
 
-UGMC_OrganicMovementCmp* IGMCMotionWarpInterface::GetOrganicMovementCmp(){
+UGMCMotionWarpedMovementCmp* IGMCMotionWarpInterface::GetOrganicMovementCmp(){
 	return nullptr;
 }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GMCMotionWarpedMovementCmp.h"
 #include "UObject/Interface.h"
 #include "GMCMotionWarpInterface.generated.h"
 
@@ -26,5 +27,5 @@ public:
 	virtual FQuat GetRotationOffset();
 	virtual FVector GetTranslationOffset();
 	virtual FAnimMontageInstance* GetRootMotionAnimMontageInstance(USkeletalMeshComponent* Mesh) const;
-	virtual UGMC_OrganicMovementCmp* GetOrganicMovementCmp();
+	virtual UGMCMotionWarpedMovementCmp* GetOrganicMovementCmp();
 };

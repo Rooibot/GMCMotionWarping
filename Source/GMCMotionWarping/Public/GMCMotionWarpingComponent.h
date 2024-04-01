@@ -173,6 +173,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Motion Warping")
 	int32 RemoveWarpTarget(FName WarpTargetName);
 
+	UFUNCTION(BlueprintCallable, Category = "Motion Warping")
+	void RemoveAllWarpTargets();
+	
+	virtual void BeginPlay() override;
+	
 protected:
 
 	/** Character this component belongs to */
@@ -193,6 +198,9 @@ protected:
 	TOptional<FVector> WarpedRootMotionAccum;
 #endif
 
+	UPROPERTY()
+	UAnimInstance* AnimInstance;
+	
 	void Update(float DeltaSeconds);
 
 	bool FindAndUpdateWarpTarget(const FMotionWarpingTarget& WarpTarget);

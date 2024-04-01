@@ -13,7 +13,6 @@ URootMotionModifier_SkewWarp::URootMotionModifier_SkewWarp(const FObjectInitiali
 
 FVector URootMotionModifier_SkewWarp::WarpTranslation(const FTransform& CurrentTransform, const FVector& DeltaTranslation, const FVector& TotalTranslation, const FVector& TargetLocation)
 {
-	UE_LOG(LogTemp, Warning, TEXT("we out here warping translations in skew warp"))
 	if (!DeltaTranslation.IsNearlyZero())
 	{
 		const FQuat CurrentRotation = CurrentTransform.GetRotation();
